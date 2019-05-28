@@ -1,6 +1,43 @@
 "use strict";
 
 var gl;
+var vp_matrix = mat4.create();
+
+var settings = {
+    uniform:
+    {
+        matrices:{},
+        cam_info:
+        {
+            //position
+            buffer: new Float32Array([0., 0., 1.5])
+        },
+        material:
+        {
+            buffer: new Float32Array([1., 1., 1., 1., 256])
+        },
+        ambient_light:
+        {
+            buffer: new Float32Array([0.1,0.1,0.1])
+        },
+        point_light:
+        {
+            buffer: new Float32Array([0.0, 0.0, 4, 24., 1.0, 1.0, 1.0])
+        },
+        point_lightV:{},
+        settings:
+        {
+            buffer: new Int32Array([1,1,1,1])
+        }
+    },
+    tex:
+    {
+        diffuse:{slot:0},
+        normal:{slot:1},
+        specular:{slot:2},
+        emissive:{slot:3}
+    }
+}
 
 function Float32Concat(first, second)
 {
@@ -10,8 +47,36 @@ function Float32Concat(first, second)
     result.set(second, first_length);
     return result;
 }
-var vp_matrix = mat4.create();
-var matrices_ubo = null;
+
+function makeSampler() {
+    var linear_sampler = gl.createSampler();
+    gl.samplerParameteri(linear_sampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.samplerParameteri(linear_sampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.samplerParameteri(linear_sampler, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+    gl.samplerParameteri(linear_sampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.samplerParameteri(linear_sampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    return linear_sampler;
+}
+
+function loadTexture(textureID, texture) {
+    gl.bindTexture(gl.TEXTURE_2D, textureID);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+}
+
+function bindUniformBufferData(ubo, buffer) {
+    gl.bindBuffer(gl.UNIFORM_BUFFER, ubo);
+    gl.bufferData(gl.UNIFORM_BUFFER, buffer, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+}
+
+function SubUniformBuffer(ubo, buffer) {
+    gl.bindBuffer(gl.UNIFORM_BUFFER, ubo);
+    gl.bufferSubData(gl.UNIFORM_BUFFER, 0, buffer, 0, 0);
+    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+}
+
 function init()
 {
     var m = mat4.create();
@@ -42,62 +107,50 @@ function init()
     var program = createProgram(gl, vertex_shader, fragment_shader);
 
     // pobranie ubi
-    var matrices_ubi = gl.getUniformBlockIndex(program, "Matrices");
-    var cam_info_ubi = gl.getUniformBlockIndex(program, "CamInfo");
-    var material_ubi = gl.getUniformBlockIndex(program, "Material");
-    var point_light_ubi = gl.getUniformBlockIndex(program, "PointLight");
-    var ambient_light_ubi = gl.getUniformBlockIndex(program, "Ambient");
-    var point_lightV_ubi = gl.getUniformBlockIndex(program, "PointLightV");
+    settings.uniform.matrices.ubi = gl.getUniformBlockIndex(program, "Matrices");
+    settings.uniform.cam_info.ubi = gl.getUniformBlockIndex(program, "CamInfo");
+    settings.uniform.material.ubi = gl.getUniformBlockIndex(program, "Material");
+    settings.uniform.point_light.ubi = gl.getUniformBlockIndex(program, "PointLight");
+    settings.uniform.ambient_light.ubi = gl.getUniformBlockIndex(program, "Ambient");
+    settings.uniform.point_lightV.ubi = gl.getUniformBlockIndex(program, "PointLightV");
+    settings.uniform.settings.ubi = gl.getUniformBlockIndex(program, "Settings");
 
     // przyporzadkowanie ubi do ubb
-    let matrices_ubb = 0;
-    gl.uniformBlockBinding(program, matrices_ubi, matrices_ubb);
-    let cam_info_ubb = 1;
-    gl.uniformBlockBinding(program, cam_info_ubi, cam_info_ubb);
-    let material_ubb = 2;
-    gl.uniformBlockBinding(program, material_ubi, material_ubb);
-    let point_light_ubb = 3;
-    gl.uniformBlockBinding(program, point_light_ubi, point_light_ubb);
-    let point_lightV_ubb = 4;
-    gl.uniformBlockBinding(program, point_lightV_ubi, point_lightV_ubb);
-    let ambient_light_ubb = 5;
-    gl.uniformBlockBinding(program, ambient_light_ubi, ambient_light_ubb);
+    settings.uniform.matrices.ubb = 0;
+    settings.uniform.cam_info.ubb = 1;
+    settings.uniform.material.ubb = 2;
+    settings.uniform.point_light.ubb = 3;
+    settings.uniform.point_lightV.ubb = 4;
+    settings.uniform.ambient_light.ubb = 5;
+    settings.uniform.settings.ubb = 6;
 
-    // tworzenie sampler-a
-    let diffuseSampler = makeSampler();
-    let normalSampler = makeSampler();
-    let specularSampler = makeSampler();
-    let emissiverSampler = makeSampler();
+    for(let name in settings.uniform)
+    {
+        let uni = settings.uniform[name];
+        gl.uniformBlockBinding(program, uni.ubi, uni.ubb);
+    }
     
-    // tworzenie teksutry
-    let diffuse = document.querySelector("#diffuse");
-    let normal = document.querySelector("#normal");
-    let specular = document.querySelector("#specular");
-    let emissive = document.querySelector("#emissive");
+    settings.tex.diffuse.sampler = makeSampler();
+    settings.tex.normal.sampler = makeSampler();
+    settings.tex.specular.sampler = makeSampler();
+    settings.tex.emissive.sampler = makeSampler();
+    
+    settings.tex.diffuse.src = document.querySelector("#diffuse");
+    settings.tex.normal.src = document.querySelector("#normal");
+    settings.tex.specular.src = document.querySelector("#specular");
+    settings.tex.emissive.src = document.querySelector("#emissive");
 
-    let texdiffuse = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texdiffuse);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, diffuse);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    settings.tex.diffuse.id = gl.createTexture();
+    loadTexture(settings.tex.diffuse.id, settings.tex.diffuse.src);
 
-    let texnormal = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texnormal);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, normal);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    settings.tex.normal.id = gl.createTexture();
+    loadTexture(settings.tex.normal.id, settings.tex.normal.src);
 
-    let texspecular = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texspecular);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, specular);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    settings.tex.specular.id = gl.createTexture();
+    loadTexture(settings.tex.specular.id, settings.tex.specular.src);
 
-    let texemissive = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texemissive);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, emissive);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    settings.tex.emissive.id = gl.createTexture();
+    loadTexture(settings.tex.emissive.id, settings.tex.emissive.src);
 
     let Pyramid = new Hexahedron([
         [-0.5, -0.2,  0.5],
@@ -117,19 +170,15 @@ function init()
     Pyramid.setFaceTex(4,[0,1],[1,1],[0.75,0],[0.25,0]);
     Pyramid.setFaceTex(5,[0,1],[1,1],[0.75,0],[0.25,0]);
 
-
-    // tworzenie VBO
     var vbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
     gl.bufferData(gl.ARRAY_BUFFER, Pyramid.VertexBuffer, gl.STATIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
 
-    // tworzenie bufora indeksow
     var index_buffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, index_buffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, Pyramid.IndexBuffer, gl.STATIC_DRAW);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-
 
     let gpu_positions_attrib_location = 0; // musi być taka sama jak po stronie GPU!!!
     let gpu_normals_attrib_location = 1;
@@ -156,66 +205,50 @@ function init()
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 
-    // pozycja kamery
-    let cam_pos = new Float32Array([0., 0., 1.5]);
-
     // dane o macierzy
     var mvp_matrix = mat4.create();
     var model_matrix = mat4.create();
-    //mat4.rotateY(model_matrix, model_matrix, Math.PI/4);
     var view_matrix = mat4.create();
-    mat4.lookAt(view_matrix, cam_pos, new Float32Array([0., 0., 0.]), new Float32Array([0., 1., 0.]));
-    //mat4.lookAt(view_matrix, new Float32Array([0., -2., 2.]), new Float32Array([0., 0., 0.]), new Float32Array([0., 0., 1.]));
+    mat4.lookAt(view_matrix, settings.uniform.cam_info.buffer, new Float32Array([0., 0., 0.]), new Float32Array([0., 1., 0.]));
     var projection_matrix = mat4.create();
     mat4.perspective(projection_matrix, Math.PI/4., gl.drawingBufferWidth/gl.drawingBufferHeight, 0.01, 10);
     mat4.multiply(mvp_matrix, projection_matrix, view_matrix);
     mat4.copy(vp_matrix,mvp_matrix);
     mat4.multiply(mvp_matrix, mvp_matrix, model_matrix);
 
-    // dane dotyczace materialu
-    let material_data = new Float32Array([1., 1., 1., 1., 256]);
+    settings.uniform.matrices.ubo = gl.createBuffer();
+    bindUniformBufferData(settings.uniform.matrices.ubo, Float32Concat(mvp_matrix, model_matrix));
 
-    // dane dotyczace swiatla punktowego
-    let point_light_data = new Float32Array([-4.0, 0.0, 4, 24., 1.0, 1.0, 1.0]);
+    settings.uniform.cam_info.ubo = gl.createBuffer();
+    bindUniformBufferData(settings.uniform.cam_info.ubo, settings.uniform.cam_info.buffer);
 
-    let ambient_light_data = new Float32Array([0.1,0.1,0.1]);
-    // tworzenie UBO
-    matrices_ubo = gl.createBuffer();
-    gl.bindBuffer(gl.UNIFORM_BUFFER, matrices_ubo);
-    gl.bufferData(gl.UNIFORM_BUFFER, Float32Concat(mvp_matrix, model_matrix), gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-    var cam_info_ubo = gl.createBuffer();
-    gl.bindBuffer(gl.UNIFORM_BUFFER, cam_info_ubo);
-    gl.bufferData(gl.UNIFORM_BUFFER, cam_pos, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-    var material_ubo = gl.createBuffer();
-    gl.bindBuffer(gl.UNIFORM_BUFFER, material_ubo);
-    gl.bufferData(gl.UNIFORM_BUFFER, material_data, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
-    var point_light_ubo = gl.createBuffer();
-    gl.bindBuffer(gl.UNIFORM_BUFFER, point_light_ubo);
-    gl.bufferData(gl.UNIFORM_BUFFER, point_light_data, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+    settings.uniform.material.ubo = gl.createBuffer();
+    bindUniformBufferData(settings.uniform.material.ubo, settings.uniform.material.buffer);
 
-    var ambient_light_ubo = gl.createBuffer();
-    gl.bindBuffer(gl.UNIFORM_BUFFER, ambient_light_ubo);
-    gl.bufferData(gl.UNIFORM_BUFFER, ambient_light_data, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+    settings.uniform.point_light.ubo = gl.createBuffer();
+    settings.uniform.point_lightV.ubo = settings.uniform.point_light.ubo;
+    bindUniformBufferData(settings.uniform.point_light.ubo, settings.uniform.point_light.buffer);
+
+    settings.uniform.ambient_light.ubo = gl.createBuffer();
+    bindUniformBufferData(settings.uniform.ambient_light.ubo, settings.uniform.ambient_light.buffer);
+
+    settings.uniform.settings.ubo = gl.createBuffer();
+    bindUniformBufferData(settings.uniform.settings.ubo, settings.uniform.settings.buffer);
 
     // ustawienia danych dla funkcji draw*
     gl.useProgram(program);
-    gl.bindSampler(0, diffuseSampler);
+    gl.bindSampler(0, settings.tex.diffuse.sampler);
     gl.activeTexture(gl.TEXTURE0 +  0);
-    gl.bindTexture(gl.TEXTURE_2D, texdiffuse);
-    gl.bindSampler(1, normalSampler);
+    gl.bindTexture(gl.TEXTURE_2D, settings.tex.diffuse.id);
+    gl.bindSampler(1, settings.tex.normal.sampler);
     gl.activeTexture(gl.TEXTURE0 +  1);
-    gl.bindTexture(gl.TEXTURE_2D, texnormal);
-    gl.bindSampler(2, specularSampler);
+    gl.bindTexture(gl.TEXTURE_2D, settings.tex.normal.id);
+    gl.bindSampler(2, settings.tex.specular.sampler);
     gl.activeTexture(gl.TEXTURE0 +  2);
-    gl.bindTexture(gl.TEXTURE_2D, texspecular);
-    gl.bindSampler(3, emissiverSampler);
+    gl.bindTexture(gl.TEXTURE_2D, settings.tex.specular.id);
+    gl.bindSampler(3, settings.tex.emissive.sampler);
     gl.activeTexture(gl.TEXTURE0 +  3);
-    gl.bindTexture(gl.TEXTURE_2D, texemissive);
+    gl.bindTexture(gl.TEXTURE_2D, settings.tex.emissive.id);
 
     gl.uniform1i(gl.getUniformLocation(program,"color_tex"), 0);
     gl.uniform1i(gl.getUniformLocation(program,"normal_tex"), 1);
@@ -223,27 +256,106 @@ function init()
     gl.uniform1i(gl.getUniformLocation(program,"emissive_tex"), 3);
 
     gl.bindVertexArray(vao);
-    gl.bindBufferBase(gl.UNIFORM_BUFFER, matrices_ubb, matrices_ubo);
-    gl.bindBufferBase(gl.UNIFORM_BUFFER, cam_info_ubb, cam_info_ubo);
-    gl.bindBufferBase(gl.UNIFORM_BUFFER, material_ubb, material_ubo);
-    gl.bindBufferBase(gl.UNIFORM_BUFFER, point_light_ubb, point_light_ubo);
-    gl.bindBufferBase(gl.UNIFORM_BUFFER, point_lightV_ubb, point_light_ubo);
-    gl.bindBufferBase(gl.UNIFORM_BUFFER, ambient_light_ubb, ambient_light_ubo);
-
-
-    function makeSampler() {
-        var linear_sampler = gl.createSampler();
-        gl.samplerParameteri(linear_sampler, gl.TEXTURE_WRAP_S, gl.REPEAT);
-        gl.samplerParameteri(linear_sampler, gl.TEXTURE_WRAP_T, gl.REPEAT);
-        gl.samplerParameteri(linear_sampler, gl.TEXTURE_WRAP_R, gl.REPEAT);
-        gl.samplerParameteri(linear_sampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-        gl.samplerParameteri(linear_sampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        return linear_sampler;
+    for(let name in settings.uniform)
+    {
+        let uni = settings.uniform[name];
+        gl.bindBufferBase(gl.UNIFORM_BUFFER, uni.ubb, uni.ubo);
     }
+
+    function updateSettings(id)
+    {
+        return function(event)
+        {
+            if(this.checked)
+                settings.uniform.settings.buffer.set([1],id);
+            else
+                settings.uniform.settings.buffer.set([0],id);
+            SubUniformBuffer(settings.uniform.settings.ubo, settings.uniform.settings.buffer);
+        };
+    };
+
+    document.getElementById("useDiffuse").addEventListener("change", updateSettings(0));
+    document.getElementById("useNormal").addEventListener("change", updateSettings(1));
+    document.getElementById("useSpecular").addEventListener("change", updateSettings(2));
+    document.getElementById("useEmissive").addEventListener("change", updateSettings(3));
+
+    document.getElementById("matColor").addEventListener("change", function(event)
+    {
+        let newColor = this.value.match(/[A-Za-z0-9]{2}/g).map(function(v) { return (parseInt(v, 16)/256) })
+        settings.uniform.material.buffer.set(newColor, 0);
+        SubUniformBuffer(settings.uniform.material.ubo, settings.uniform.material.buffer);
+    });
+
+    document.getElementById("lightColor").addEventListener("change", function(event)
+    {
+        let newColor = this.value.match(/[A-Za-z0-9]{2}/g).map(function(v) { return (parseInt(v, 16)/256) })
+        settings.uniform.point_light.buffer.set(newColor, 4);
+        SubUniformBuffer(settings.uniform.point_light.ubo, settings.uniform.point_light.buffer);
+    });
+
+    document.getElementById("ambientColor").addEventListener("change", function(event)
+    {
+        let newColor = this.value.match(/[A-Za-z0-9]{2}/g).map(function(v) { return (parseInt(v, 16)/256) })
+        settings.uniform.ambient_light.buffer.set(newColor, 0);
+        SubUniformBuffer(settings.uniform.ambient_light.ubo, settings.uniform.ambient_light.buffer);
+    });
+
+    document.getElementById("specularIntensity").addEventListener("change", function(event)
+    {
+        settings.uniform.material.buffer.set([this.value], 3);
+        SubUniformBuffer(settings.uniform.material.ubo, settings.uniform.material.buffer);
+    });
+
+    function uploadTexture(kind)
+    {
+        settings.tex[kind].customID = gl.createTexture();
+        settings.tex[kind].customSRC = document.getElementById(kind+"Img")
+        return function(event)
+        {
+            console.log("Uploading "+kind)
+            let reader = new FileReader();
+            settings.tex[kind].customSRC.onload = function()
+            {
+                console.log("Loading "+kind)
+                console.log(settings.tex[kind].slot);
+                loadTexture(settings.tex[kind].customID, settings.tex[kind].customSRC);
+                gl.activeTexture(gl.TEXTURE0 + settings.tex[kind].slot);
+                gl.bindTexture(gl.TEXTURE_2D, settings.tex[kind].customID);
+            }
+            reader.onload = function()
+            {
+                console.log("Uploaded "+kind)
+                settings.tex[kind].customSRC.src = reader.result;
+            }
+            reader.readAsDataURL(this.files[0]);
+        };
+    };
+
+    document.getElementById("diffuseInput").addEventListener("change", uploadTexture("diffuse"));
+    document.getElementById("normalInput").addEventListener("change", uploadTexture("normal"));
+    document.getElementById("specularInput").addEventListener("change", uploadTexture("specular"));
+    document.getElementById("emissiveInput").addEventListener("change", uploadTexture("emissive"));
+
+    function resetTexture(kind)
+    {
+        return function(event)
+        {
+            console.log("Resetting "+kind)
+            settings.tex[kind].customSRC.src = ""
+            gl.activeTexture(gl.TEXTURE0 + settings.tex[kind].slot);
+            gl.bindTexture(gl.TEXTURE_2D, settings.tex[kind].id);
+        }
+    }
+
+    document.getElementById("resetDiffuse").addEventListener("click", resetTexture("diffuse"));
+    document.getElementById("resetNormal").addEventListener("click", resetTexture("normal"));
+    document.getElementById("resetSpecular").addEventListener("click", resetTexture("specular"));
+    document.getElementById("resetEmissive").addEventListener("click", resetTexture("emissive"));
 }
 
 var counter = 0.0;
 const rot_speed = 0.0025;
+
 function draw()
 {
     // wyczyszczenie ekranu
@@ -257,7 +369,7 @@ function draw()
     //mat4.rotateY(model_matrix, model_matrix, counter);
     mat4.multiply(mvp_matrix, vp_matrix, model_matrix);    
 
-    gl.bindBuffer(gl.UNIFORM_BUFFER, matrices_ubo);
+    gl.bindBuffer(gl.UNIFORM_BUFFER, settings.uniform.matrices.ubo);
     gl.bufferSubData(gl.UNIFORM_BUFFER,0,Float32Concat(mvp_matrix, model_matrix),0,0);
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 
@@ -354,8 +466,10 @@ var vs_source = `#version 300 es
     }`;
 
 // fragment shader (GLSL)
+
 var fs_source = `#version 300 es
     precision mediump float;
+    precision lowp int;
 
     in vec3 position_ws;
     in vec3 vV;
@@ -367,6 +481,14 @@ var fs_source = `#version 300 es
     uniform sampler2D normal_tex;
     uniform sampler2D specular_tex;
     uniform sampler2D emissive_tex;
+
+    layout(std140) uniform Settings
+    {
+        int use_diffuse;
+        int use_normal;
+        int use_specular;
+        int use_emissive;
+    } settings;
 
     layout(std140) uniform Material
     {
@@ -387,22 +509,85 @@ var fs_source = `#version 300 es
         vec3 color;
     } ambient_light;
 
+    vec4 getEmissive()
+    {
+        switch(settings.use_emissive)
+        {
+            default:
+            case 0:
+            {
+                return vec4(0.0);
+            }
+            case 1:
+            {
+                return texture(emissive_tex, tex_coord);
+            }
+        }
+    }
+
+    vec4 getSpecular()
+    {
+        switch(settings.use_specular)
+        {
+            default:
+            case 0:
+            {
+                return vec4(material.specular_intensity);
+            }
+            case 1:
+            {
+                return texture(specular_tex, tex_coord);
+            }
+        }
+    }
+
+    vec4 getNormal()
+    {
+        switch(settings.use_normal)
+        {
+            default:
+            case 0:
+            {
+                return vec4(0.0,0.0,1.0,0.0);
+            }
+            case 1:
+            {
+                return texture(normal_tex, tex_coord)*2.0-1.0;
+            }
+        }
+    }
+    
+    vec4 getDiffuse()
+    {
+        switch(settings.use_diffuse)
+        {
+            default:
+            case 0:
+            {
+                return vec4(vec3(material.color),1.0);
+            }
+            case 1:
+            {
+                return texture(color_tex, tex_coord);
+            }
+        }
+    }
+
     void main()
     {
         vec3 dist = point_light.position_ws-position_ws;
         vec3 L = normalize(vL);
-        vec3 V = normalize(vL);
-        vec3 N = normalize(texture(normal_tex,tex_coord).xyz*2.0-1.0);
+        vec3 V = normalize(vV);
+        vec3 N = normalize(getNormal().xyz);
         vec3 H = normalize(L+V);
-        //float attenuation = max(1. - (dist.x*dist.x+dist.y*dist.y+dist.z*dist.z)/point_light.r,0.0);
         float attenuation = 1.0/ (1.0 + (dist.x*dist.x+dist.y*dist.y+dist.z*dist.z)*0.04);
         attenuation *= 1.0 - step(point_light.r,length(dist));
-        vec4 tex_color = texture(color_tex,tex_coord);
+        vec4 tex_color = getDiffuse();
         vec3 diffuse = material.color*point_light.color*max(dot(N,L),0.0);
         diffuse *= attenuation;
         vec3 specular = pow(max(dot(H,N),0.0),material.specular_power)*point_light.color;
         specular *= attenuation;
-        specular *= texture(specular_tex,tex_coord).xyz;
-        vec3 emissive = (tex_color*texture(emissive_tex,tex_coord)).xyz;
+        specular *= getSpecular().xyz;
+        vec3 emissive = (tex_color*getEmissive()).xyz;
         vFragColor = vec4(clamp(tex_color.rgb*(ambient_light.color*material.color+diffuse)+specular+emissive,0.f,1.f),1.0);
     }`;
