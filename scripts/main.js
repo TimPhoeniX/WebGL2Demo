@@ -93,6 +93,11 @@ function SubUniformBuffer(ubo, buffer) {
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 }
 
+function RGBStringToVec(rgb)
+{
+    return rgb.match(/[A-Za-z0-9]{2}/g).map(function(v) { return (parseInt(v, 16)/256) });
+}
+
 function init()
 {
     counter = Number(0.0);
@@ -251,21 +256,21 @@ function init()
 
     document.getElementById("matColor").addEventListener("change", function(event)
     {
-        let newColor = this.value.match(/[A-Za-z0-9]{2}/g).map(function(v) { return (parseInt(v, 16)/256) })
+        let newColor = RGBStringToVec(this.value);
         settings.uniform.material.buffer.set(newColor, 0);
         SubUniformBuffer(settings.uniform.material.ubo, settings.uniform.material.buffer);
     });
 
     document.getElementById("lightColor").addEventListener("change", function(event)
     {
-        let newColor = this.value.match(/[A-Za-z0-9]{2}/g).map(function(v) { return (parseInt(v, 16)/256) })
+        let newColor = RGBStringToVec(this.value);
         settings.uniform.point_light.buffer.set(newColor, 4);
         SubUniformBuffer(settings.uniform.point_light.ubo, settings.uniform.point_light.buffer);
     });
 
     document.getElementById("ambientColor").addEventListener("change", function(event)
     {
-        let newColor = this.value.match(/[A-Za-z0-9]{2}/g).map(function(v) { return (parseInt(v, 16)/256) })
+        let newColor = RGBStringToVec(this.value);
         settings.uniform.ambient_light.buffer.set(newColor, 0);
         gl.clearColor(...newColor, 1.0);
         SubUniformBuffer(settings.uniform.ambient_light.ubo, settings.uniform.ambient_light.buffer);
