@@ -42,10 +42,11 @@ var settings = {
     }
 }
 
-const rot_speed = 0.3;
+var rot_speed = 0.5;
 var counter;
 var last_time;
 var delta_time;
+var tilt;
 
 function Float32Concat(first, second)
 {
@@ -90,6 +91,7 @@ function init()
     counter = Number(0.0);
     last_time = Number(0.0);
     delta_time = Number(0.0);
+    tilt = Number(0.0);
     // inicjalizacja webg2
     try {
         let canvas = document.querySelector("#glcanvas");
@@ -360,6 +362,14 @@ function init()
     document.getElementById("resetSpecular").addEventListener("click", resetTexture("specular"));
     document.getElementById("resetEmissive").addEventListener("click", resetTexture("emissive"));
 
+    document.getElementById("radiansPerSecond").addEventListener("change", function(event)
+    {
+        rot_speed = this.value;
+    });
+    document.getElementById("tilt").addEventListener("change", function(event)
+    {
+        tilt =  Math.PI*this.value/180;
+    });
 }
 
 function draw(timestamp)
@@ -374,7 +384,7 @@ function draw(timestamp)
     let mvp_matrix = mat4.create();
     settings.mat.M = mat4.create();
     mat4.rotateY(settings.mat.M, settings.mat.M, counter);
-    mat4.rotateZ(settings.mat.M, settings.mat.M, Math.PI/2);
+    mat4.rotateZ(settings.mat.M, settings.mat.M, tilt);
     mat4.multiply(mvp_matrix, settings.mat.P, settings.mat.V);
     mat4.multiply(mvp_matrix, mvp_matrix, settings.mat.M);    
 

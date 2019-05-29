@@ -11,6 +11,54 @@
         <canvas id="glcanvas" width="1366" height="768"></canvas>
         <table>
             <tr>
+                <th>
+                    <label for="matColor">Material Color</label>
+                </th>
+                <th>
+                    <input name="matColor" id="matColor" type="color" value="#FFFFFF">
+                </th>
+            </tr>
+            <tr>
+                <th>
+                    <label for="lightColor">Light Color</label>
+                </th>
+                <th>
+                    <input name="lightColor" id="lightColor" type="color" value="#FFFFFF">
+                </th>
+                <th>
+                    <label for="specularIntensity">Specular Intensity</label>
+                </th>
+                <th>
+                    <input name="specularIntensity" id="specularIntensity" type="number" value="1" min="0" max="1", step="any">
+                </th>
+            </tr>
+            <tr>
+                <th>
+                    <label for="ambientColor">Ambient Color</label>
+                </th>
+                <th>
+                    <input name="ambientColor" id="ambientColor" type="color" value="#191919">
+                </th>
+            </tr>
+            <tr>
+                <th>
+                    <label for="radiansPerSecond">Y-axis Rotations [rad/s]</label>
+                </th>
+                <th>
+                    <input name="radiansPerSecond" id="radiansPerSecond" type="number" value="0.5" step="any">
+                </th>
+            </tr>
+            <tr>
+                <th>
+                    <label for="tilt">Tilt [degrees]</label>
+                </th>
+                <th>
+                    <input name="tilt" id="tilt" type="number" value="0.0" step="any" min="0", max="180">
+                </th>
+            </tr>
+        </table>
+        <table>
+            <tr>
                 <th><input type="checkbox" name="useDiffuse" id="useDiffuse" checked><label for="useDiffuse">Diffuse</label></th>
                 <th><input type="checkbox" name="useNormal" id="useNormal" checked><label for="useNormal">Normal</label></th>
                 <th><input type="checkbox" name="useSpecular" id="useSpecular" checked><label for="useSpecular">Specular</label></th>
@@ -47,38 +95,5 @@
                 <th><button id="resetEmissive">Reset</button></th>
             </tr>
         </table>
-        <table>
-            <tr>
-                <th>
-                    <label for="matColor">Material Color</label>
-                </th>
-                <th>
-                    <input name="matColor" id="matColor" type="color" value="#FFFFFF">
-                </th>
-            </tr>
-            <tr>
-                <th>
-                    <label for="lightColor">Light Color</label>
-                </th>
-                <th>
-                    <input name="lightColor" id="lightColor" type="color" value="#FFFFFF">
-                </th>
-                <th>
-                    <label for="specularIntensity">Specular Intensity</label>
-                </th>
-                <th>
-                    <input name="specularIntensity" id="specularIntensity" type="number" value="1" min="0" max="1", step="any">
-                </th>
-            </tr>
-            <tr>
-                <th>
-                    <label for="ambientColor">Ambient Color</label>
-                </th>
-                <th>
-                    <input name="ambientColor" id="ambientColor" type="color" value="#191919">
-                </th>
-            </tr>
-        </table>
-        </div>
     </body>
 </html>
