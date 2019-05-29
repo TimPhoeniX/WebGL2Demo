@@ -1,7 +1,6 @@
 "use strict";
 
 var gl;
-var vp_matrix = mat4.create();
 
 var settings = {
     uniform:
@@ -36,8 +35,17 @@ var settings = {
         normal:{slot:1},
         specular:{slot:2},
         emissive:{slot:3}
+    },
+    mat:
+    {
+
     }
 }
+
+const rot_speed = 0.3;
+var counter;
+var last_time;
+var delta_time;
 
 function Float32Concat(first, second)
 {
@@ -79,7 +87,9 @@ function SubUniformBuffer(ubo, buffer) {
 
 function init()
 {
-    var m = mat4.create();
+    counter = Number(0.0);
+    last_time = Number(0.0);
+    delta_time = Number(0.0);
     // inicjalizacja webg2
     try {
         let canvas = document.querySelector("#glcanvas");
@@ -207,17 +217,16 @@ function init()
 
     // dane o macierzy
     var mvp_matrix = mat4.create();
-    var model_matrix = mat4.create();
-    var view_matrix = mat4.create();
-    mat4.lookAt(view_matrix, settings.uniform.cam_info.buffer, new Float32Array([0., 0., 0.]), new Float32Array([0., 1., 0.]));
-    var projection_matrix = mat4.create();
-    mat4.perspective(projection_matrix, Math.PI/4., gl.drawingBufferWidth/gl.drawingBufferHeight, 0.01, 10);
-    mat4.multiply(mvp_matrix, projection_matrix, view_matrix);
-    mat4.copy(vp_matrix,mvp_matrix);
-    mat4.multiply(mvp_matrix, mvp_matrix, model_matrix);
+    settings.mat.M = mat4.create();
+    settings.mat.V = mat4.create();
+    settings.mat.P = mat4.create();
+    mat4.lookAt(settings.mat.V, settings.uniform.cam_info.buffer, new Float32Array([0., 0., 0.]), new Float32Array([0., 1., 0.]));
+    mat4.perspective(settings.mat.P, Math.PI/4., gl.drawingBufferWidth/gl.drawingBufferHeight, 0.01, 10);
+    mat4.multiply(mvp_matrix, settings.mat.P, settings.mat.V);
+    mat4.multiply(mvp_matrix, mvp_matrix, settings.mat.M);
 
     settings.uniform.matrices.ubo = gl.createBuffer();
-    bindUniformBufferData(settings.uniform.matrices.ubo, Float32Concat(mvp_matrix, model_matrix));
+    bindUniformBufferData(settings.uniform.matrices.ubo, Float32Concat(mvp_matrix, settings.mat.M));
 
     settings.uniform.cam_info.ubo = gl.createBuffer();
     bindUniformBufferData(settings.uniform.cam_info.ubo, settings.uniform.cam_info.buffer);
@@ -297,6 +306,7 @@ function init()
     {
         let newColor = this.value.match(/[A-Za-z0-9]{2}/g).map(function(v) { return (parseInt(v, 16)/256) })
         settings.uniform.ambient_light.buffer.set(newColor, 0);
+        gl.clearColor(...newColor, 1.0);
         SubUniformBuffer(settings.uniform.ambient_light.ubo, settings.uniform.ambient_light.buffer);
     });
 
@@ -308,23 +318,20 @@ function init()
 
     function uploadTexture(kind)
     {
-        settings.tex[kind].customID = gl.createTexture();
         settings.tex[kind].customSRC = document.getElementById(kind+"Img")
+        settings.tex[kind].customSRC.onload = function()
+        {
+            gl.deleteTexture(settings.tex[kind].customID);
+            settings.tex[kind].customID = gl.createTexture();
+            gl.activeTexture(gl.TEXTURE0 + settings.tex[kind].slot);
+            loadTexture(settings.tex[kind].customID, settings.tex[kind].customSRC);
+            gl.bindTexture(gl.TEXTURE_2D, settings.tex[kind].customID);
+        }
         return function(event)
         {
-            console.log("Uploading "+kind)
             let reader = new FileReader();
-            settings.tex[kind].customSRC.onload = function()
-            {
-                console.log("Loading "+kind)
-                console.log(settings.tex[kind].slot);
-                loadTexture(settings.tex[kind].customID, settings.tex[kind].customSRC);
-                gl.activeTexture(gl.TEXTURE0 + settings.tex[kind].slot);
-                gl.bindTexture(gl.TEXTURE_2D, settings.tex[kind].customID);
-            }
             reader.onload = function()
             {
-                console.log("Uploaded "+kind)
                 settings.tex[kind].customSRC.src = reader.result;
             }
             reader.readAsDataURL(this.files[0]);
@@ -338,9 +345,10 @@ function init()
 
     function resetTexture(kind)
     {
+        let texInput = document.getElementById(kind+"Input");
         return function(event)
         {
-            console.log("Resetting "+kind)
+            texInput.value = null;
             settings.tex[kind].customSRC.src = ""
             gl.activeTexture(gl.TEXTURE0 + settings.tex[kind].slot);
             gl.bindTexture(gl.TEXTURE_2D, settings.tex[kind].id);
@@ -351,26 +359,27 @@ function init()
     document.getElementById("resetNormal").addEventListener("click", resetTexture("normal"));
     document.getElementById("resetSpecular").addEventListener("click", resetTexture("specular"));
     document.getElementById("resetEmissive").addEventListener("click", resetTexture("emissive"));
+
 }
 
-var counter = 0.0;
-const rot_speed = 0.0025;
-
-function draw()
+function draw(timestamp)
 {
+    timestamp = timestamp || 0.0;
+    delta_time = ((timestamp - last_time)/1000.0);
+    last_time = timestamp;
     // wyczyszczenie ekranu
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    counter += rot_speed;
+    counter += (rot_speed * delta_time);
     let mvp_matrix = mat4.create();
-    let model_matrix = mat4.create();
-    mat4.rotateY(model_matrix, model_matrix, counter);
-    mat4.rotateZ(model_matrix, model_matrix, Math.PI/2);
-    //mat4.rotateY(model_matrix, model_matrix, counter);
-    mat4.multiply(mvp_matrix, vp_matrix, model_matrix);    
+    settings.mat.M = mat4.create();
+    mat4.rotateY(settings.mat.M, settings.mat.M, counter);
+    mat4.rotateZ(settings.mat.M, settings.mat.M, Math.PI/2);
+    mat4.multiply(mvp_matrix, settings.mat.P, settings.mat.V);
+    mat4.multiply(mvp_matrix, mvp_matrix, settings.mat.M);    
 
     gl.bindBuffer(gl.UNIFORM_BUFFER, settings.uniform.matrices.ubo);
-    gl.bufferSubData(gl.UNIFORM_BUFFER,0,Float32Concat(mvp_matrix, model_matrix),0,0);
+    gl.bufferSubData(gl.UNIFORM_BUFFER,0,Float32Concat(mvp_matrix, settings.mat.M),0,0);
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 
     // wyslanie polecania rysowania do GPU (odpalenie shader-ow)
