@@ -9,6 +9,7 @@ class Model
         this.indexBuffer = getIndexBuffer(indices);
         this.vao = getVAO(this.vbo,this.indexBuffer, attributes);
         this.ver_count = indices.length;
+        return this;
     }
 }
 
@@ -22,9 +23,10 @@ function drawModel(model)
 function getVBO(vertices, mode)
 {
     let vbo = gl.createBuffer();
+    let buffer = new Float32Array(vertices)
     mode = mode | gl.STATIC_DRAW;
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), mode);
+    gl.bufferData(gl.ARRAY_BUFFER, buffer, mode);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
     return vbo;   
 }
@@ -32,9 +34,10 @@ function getVBO(vertices, mode)
 function getIndexBuffer(indices, mode)
 {
     let index_buffer = gl.createBuffer();
+    let buffer = new Uint16Array(indices);
     mode = mode | gl.STATIC_DRAW;
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, index_buffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, buffer, gl.STATIC_DRAW);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
     return index_buffer;   
 }
@@ -152,6 +155,14 @@ class Hexahedron
         setFace(5,3,0,4,7);
         this.VertexBuffer = VertexBuffer;
         this.IndexBuffer = IndexBuffer;
+        let attr = [
+            new Attribute(0, 3, gl.FLOAT), //position
+            new Attribute(1, 3, gl.FLOAT), //normal
+            new Attribute(2, 3, gl.FLOAT), //tangent
+            new Attribute(3, 3, gl.FLOAT), //bitangent
+            new Attribute(4, 2, gl.FLOAT) //tex_coord
+        ];
+        this.Attributes = makeAttrArray(attr);
         return this;
     }
 

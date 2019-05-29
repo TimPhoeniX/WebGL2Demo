@@ -149,27 +149,18 @@ function init()
         gl.uniformBlockBinding(program, uni.ubi, uni.ubb);
     }
     
-    settings.tex.diffuse.sampler = makeSampler();
-    settings.tex.normal.sampler = makeSampler();
-    settings.tex.specular.sampler = makeSampler();
-    settings.tex.emissive.sampler = makeSampler();
-    
-    settings.tex.diffuse.src = document.querySelector("#diffuse");
-    settings.tex.normal.src = document.querySelector("#normal");
-    settings.tex.specular.src = document.querySelector("#specular");
-    settings.tex.emissive.src = document.querySelector("#emissive");
+    function prepareTexture(kind)
+    {
+        settings.tex[kind].sampler = makeSampler();
+        settings.tex[kind].src  = document.getElementById(kind);
+        settings.tex[kind].id = gl.createTexture();
+        loadTexture(settings.tex[kind].id, settings.tex[kind].src);
+    }
 
-    settings.tex.diffuse.id = gl.createTexture();
-    loadTexture(settings.tex.diffuse.id, settings.tex.diffuse.src);
-
-    settings.tex.normal.id = gl.createTexture();
-    loadTexture(settings.tex.normal.id, settings.tex.normal.src);
-
-    settings.tex.specular.id = gl.createTexture();
-    loadTexture(settings.tex.specular.id, settings.tex.specular.src);
-
-    settings.tex.emissive.id = gl.createTexture();
-    loadTexture(settings.tex.emissive.id, settings.tex.emissive.src);
+    for(let name in settings.tex)
+    {
+        prepareTexture(name);
+    }
 
     let Pyramid = new Hexahedron([
         [-0.5, -0.2,  0.5],
@@ -189,41 +180,8 @@ function init()
     Pyramid.setFaceTex(4,[0,1],[1,1],[0.75,0],[0.25,0]);
     Pyramid.setFaceTex(5,[0,1],[1,1],[0.75,0],[0.25,0]);
 
-    var vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, Pyramid.VertexBuffer, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-
-    var index_buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, index_buffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, Pyramid.IndexBuffer, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-
-    let gpu_positions_attrib_location = 0; // musi być taka sama jak po stronie GPU!!!
-    let gpu_normals_attrib_location = 1;
-    let gpu_tangents_attrib_location = 2;
-    let gpu_bitangets_attrib_location = 3;
-    let gpu_tex_coord_attrib_location = 4;
-
-    // tworzenie VAO
-    var vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, index_buffer);
-    gl.enableVertexAttribArray(gpu_positions_attrib_location);
-    gl.vertexAttribPointer(gpu_positions_attrib_location, 3, gl.FLOAT, gl.FALSE, 14*4, 0);
-    gl.enableVertexAttribArray(gpu_normals_attrib_location);
-    gl.vertexAttribPointer(gpu_normals_attrib_location, 3, gl.FLOAT, gl.FALSE, 14*4, 3*4);
-    gl.enableVertexAttribArray(gpu_tangents_attrib_location);
-    gl.vertexAttribPointer(gpu_tangents_attrib_location, 3, gl.FLOAT, gl.FALSE, 14*4, 6*4);
-    gl.enableVertexAttribArray(gpu_bitangets_attrib_location);
-    gl.vertexAttribPointer(gpu_bitangets_attrib_location, 3, gl.FLOAT, gl.FALSE, 14*4, 9*4);
-    gl.enableVertexAttribArray(gpu_tex_coord_attrib_location);
-    gl.vertexAttribPointer(gpu_tex_coord_attrib_location, 2, gl.FLOAT, gl.FALSE, 14*4, 12*4);
-    gl.bindVertexArray(null);
-    gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-
+    settings.model = new Model(Pyramid.VertexBuffer, Pyramid.IndexBuffer, Pyramid.Attributes);
+    
     // dane o macierzy
     var mvp_matrix = mat4.create();
     settings.mat.M = mat4.create();
@@ -255,25 +213,19 @@ function init()
 
     // ustawienia danych dla funkcji draw*
     gl.useProgram(program);
-    gl.bindSampler(0, settings.tex.diffuse.sampler);
-    gl.activeTexture(gl.TEXTURE0 +  0);
-    gl.bindTexture(gl.TEXTURE_2D, settings.tex.diffuse.id);
-    gl.bindSampler(1, settings.tex.normal.sampler);
-    gl.activeTexture(gl.TEXTURE0 +  1);
-    gl.bindTexture(gl.TEXTURE_2D, settings.tex.normal.id);
-    gl.bindSampler(2, settings.tex.specular.sampler);
-    gl.activeTexture(gl.TEXTURE0 +  2);
-    gl.bindTexture(gl.TEXTURE_2D, settings.tex.specular.id);
-    gl.bindSampler(3, settings.tex.emissive.sampler);
-    gl.activeTexture(gl.TEXTURE0 +  3);
-    gl.bindTexture(gl.TEXTURE_2D, settings.tex.emissive.id);
+
+    for(let name in settings.tex)
+    {
+        gl.bindSampler(settings.tex[name].slot, settings.tex[name].sampler);
+        gl.activeTexture(gl.TEXTURE0 + settings.tex[name].slot);
+        gl.bindTexture(gl.TEXTURE_2D, settings.tex[name].id);
+    }
 
     gl.uniform1i(gl.getUniformLocation(program,"color_tex"), 0);
     gl.uniform1i(gl.getUniformLocation(program,"normal_tex"), 1);
     gl.uniform1i(gl.getUniformLocation(program,"specular_tex"), 2);
     gl.uniform1i(gl.getUniformLocation(program,"emissive_tex"), 3);
 
-    gl.bindVertexArray(vao);
     for(let name in settings.uniform)
     {
         let uni = settings.uniform[name];
@@ -441,7 +393,7 @@ function draw(timestamp)
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 
     // wyslanie polecania rysowania do GPU (odpalenie shader-ow)
-    gl.drawElements(gl.TRIANGLES, 3*2*6, gl.UNSIGNED_SHORT, 0);
+    drawModel(settings.model);
 
     window.requestAnimationFrame(draw);
 }
