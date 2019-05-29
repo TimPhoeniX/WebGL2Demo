@@ -1,5 +1,11 @@
 "use strict";
 
+Math.clamp = function(number, min, max) {
+    return Math.min(Math.max(number, min), max);
+  };
+
+const vec3_zero = vec3.create();
+
 var gl;
 
 var settings = {
@@ -36,10 +42,11 @@ var settings = {
         specular:{slot:2},
         emissive:{slot:3}
     },
-    mat:
-    {
-
-    }
+    mat:{},
+    cam: vec3.fromValues(0., 0., 1.5),
+    keys:{},
+    x:0,
+    y:0
 }
 
 var rot_speed = 0.5;
@@ -370,6 +377,43 @@ function init()
     {
         tilt =  Math.PI*this.value/180;
     });
+
+    window.addEventListener("keydown", function(event)
+    {
+        settings.keys[event.keyCode] = true;
+    });
+    window.addEventListener("keyup", function(event)
+    {
+        settings.keys[event.keyCode] = false;
+    });
+}
+
+const yLimit = Math.PI * 0.5 * 0.9999
+
+function updateCameraPosition()
+{
+    let x = 0;
+    let y = 0;
+    if(settings.keys[65])
+        x -= 1;
+    if(settings.keys[68])
+        x += 1;
+    if(settings.keys[83])
+        y += 1;
+    if(settings.keys[87])
+        y -= 1;
+
+    settings.x += delta_time*x;
+    settings.y += delta_time*y;
+
+    settings.y = Math.clamp(settings.y, -yLimit, yLimit);
+    
+    let newCam = vec3.create();
+    vec3.rotateX(newCam, settings.cam, vec3_zero, settings.y)
+    vec3.rotateY(newCam, newCam, vec3_zero, settings.x)
+
+    settings.uniform.cam_info.buffer.set(newCam, 0);
+    SubUniformBuffer(settings.uniform.cam_info.ubo, settings.uniform.cam_info.buffer);
 }
 
 function draw(timestamp)
@@ -381,10 +425,14 @@ function draw(timestamp)
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     counter += (rot_speed * delta_time);
+    
+    updateCameraPosition();
+
     let mvp_matrix = mat4.create();
     settings.mat.M = mat4.create();
     mat4.rotateY(settings.mat.M, settings.mat.M, counter);
     mat4.rotateZ(settings.mat.M, settings.mat.M, tilt);
+    mat4.lookAt(settings.mat.V, settings.uniform.cam_info.buffer, new Float32Array([0., 0., 0.]), new Float32Array([0., 1., 0.]));
     mat4.multiply(mvp_matrix, settings.mat.P, settings.mat.V);
     mat4.multiply(mvp_matrix, mvp_matrix, settings.mat.M);    
 
