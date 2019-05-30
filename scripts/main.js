@@ -74,6 +74,14 @@ function makeSampler() {
     return linear_sampler;
 }
 
+function prepareTexture(kind)
+    {
+        settings.tex[kind].sampler = makeSampler();
+        settings.tex[kind].src  = document.getElementById(kind);
+        settings.tex[kind].id = gl.createTexture();
+        loadTexture(settings.tex[kind].id, settings.tex[kind].src);
+    }
+
 function loadTexture(textureID, texture) {
     gl.bindTexture(gl.TEXTURE_2D, textureID);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture);
@@ -92,6 +100,52 @@ function SubUniformBuffer(ubo, buffer) {
     gl.bufferSubData(gl.UNIFORM_BUFFER, 0, buffer, 0, 0);
     gl.bindBuffer(gl.UNIFORM_BUFFER, null);
 }
+
+function resetTexture(kind)
+{
+    let texInput = document.getElementById(kind+"Input");
+    return function(event)
+    {
+        texInput.value = null;
+        settings.tex[kind].customSRC.src = ""
+        gl.activeTexture(gl.TEXTURE0 + settings.tex[kind].slot);
+        gl.bindTexture(gl.TEXTURE_2D, settings.tex[kind].id);
+    }
+}
+
+function updateSettings(id)
+{
+    return function(event)
+    {
+        if(this.checked)
+            settings.uniform.settings.buffer.set([1],id);
+        else
+            settings.uniform.settings.buffer.set([0],id);
+        SubUniformBuffer(settings.uniform.settings.ubo, settings.uniform.settings.buffer);
+    };
+};
+
+function uploadTexture(kind)
+{
+    settings.tex[kind].customSRC = document.getElementById(kind+"Img")
+    settings.tex[kind].customSRC.onload = function()
+    {
+        gl.deleteTexture(settings.tex[kind].customID);
+        settings.tex[kind].customID = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE0 + settings.tex[kind].slot);
+        loadTexture(settings.tex[kind].customID, settings.tex[kind].customSRC);
+        gl.bindTexture(gl.TEXTURE_2D, settings.tex[kind].customID);
+    }
+    return function(event)
+    {
+        let reader = new FileReader();
+        reader.onload = function()
+        {
+            settings.tex[kind].customSRC.src = reader.result;
+        }
+        reader.readAsDataURL(this.files[0]);
+    };
+};
 
 function RGBStringToVec(rgb)
 {
@@ -154,14 +208,6 @@ function init()
         gl.uniformBlockBinding(program, uni.ubi, uni.ubb);
     }
     
-    function prepareTexture(kind)
-    {
-        settings.tex[kind].sampler = makeSampler();
-        settings.tex[kind].src  = document.getElementById(kind);
-        settings.tex[kind].id = gl.createTexture();
-        loadTexture(settings.tex[kind].id, settings.tex[kind].src);
-    }
-
     for(let name in settings.tex)
     {
         prepareTexture(name);
@@ -237,18 +283,6 @@ function init()
         gl.bindBufferBase(gl.UNIFORM_BUFFER, uni.ubb, uni.ubo);
     }
 
-    function updateSettings(id)
-    {
-        return function(event)
-        {
-            if(this.checked)
-                settings.uniform.settings.buffer.set([1],id);
-            else
-                settings.uniform.settings.buffer.set([0],id);
-            SubUniformBuffer(settings.uniform.settings.ubo, settings.uniform.settings.buffer);
-        };
-    };
-
     document.getElementById("useDiffuse").addEventListener("change", updateSettings(0));
     document.getElementById("useNormal").addEventListener("change", updateSettings(1));
     document.getElementById("useSpecular").addEventListener("change", updateSettings(2));
@@ -282,44 +316,10 @@ function init()
         SubUniformBuffer(settings.uniform.material.ubo, settings.uniform.material.buffer);
     });
 
-    function uploadTexture(kind)
-    {
-        settings.tex[kind].customSRC = document.getElementById(kind+"Img")
-        settings.tex[kind].customSRC.onload = function()
-        {
-            gl.deleteTexture(settings.tex[kind].customID);
-            settings.tex[kind].customID = gl.createTexture();
-            gl.activeTexture(gl.TEXTURE0 + settings.tex[kind].slot);
-            loadTexture(settings.tex[kind].customID, settings.tex[kind].customSRC);
-            gl.bindTexture(gl.TEXTURE_2D, settings.tex[kind].customID);
-        }
-        return function(event)
-        {
-            let reader = new FileReader();
-            reader.onload = function()
-            {
-                settings.tex[kind].customSRC.src = reader.result;
-            }
-            reader.readAsDataURL(this.files[0]);
-        };
-    };
-
     document.getElementById("diffuseInput").addEventListener("change", uploadTexture("diffuse"));
     document.getElementById("normalInput").addEventListener("change", uploadTexture("normal"));
     document.getElementById("specularInput").addEventListener("change", uploadTexture("specular"));
     document.getElementById("emissiveInput").addEventListener("change", uploadTexture("emissive"));
-
-    function resetTexture(kind)
-    {
-        let texInput = document.getElementById(kind+"Input");
-        return function(event)
-        {
-            texInput.value = null;
-            settings.tex[kind].customSRC.src = ""
-            gl.activeTexture(gl.TEXTURE0 + settings.tex[kind].slot);
-            gl.bindTexture(gl.TEXTURE_2D, settings.tex[kind].id);
-        }
-    }
 
     document.getElementById("resetDiffuse").addEventListener("click", resetTexture("diffuse"));
     document.getElementById("resetNormal").addEventListener("click", resetTexture("normal"));
@@ -407,7 +407,7 @@ function main()
 {
     init();
     draw();
-};
+}
 
 function createShader(gl, type, source)
 {
